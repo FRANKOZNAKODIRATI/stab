@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en" >
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Stake Mines Game with Balance & Cashout</title>
+  <title>Stake Mines Game</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -14,9 +14,7 @@
       align-items: center;
       padding: 20px;
     }
-    h1 {
-      margin-bottom: 10px;
-    }
+    h1 { margin-bottom: 10px; }
     .controls {
       margin-bottom: 15px;
       display: flex;
@@ -24,9 +22,7 @@
       flex-wrap: wrap;
       justify-content: center;
     }
-    label {
-      font-size: 14px;
-    }
+    label { font-size: 14px; }
     input, select {
       padding: 5px;
       border-radius: 5px;
@@ -51,21 +47,27 @@
       align-items: center;
       font-size: 30px;
       user-select: none;
-      transition: background 0.3s;
+      transition: transform 0.2s ease, background 0.3s;
     }
     .tile.revealed {
       background: #444;
       cursor: default;
+      animation: pop 0.2s ease;
     }
-    .tile.diamond {
-      color: #00ffcc;
+    .tile.diamond { color: #00ffcc; }
+    .tile.mine { color: red; }
+    @keyframes pop {
+      0% { transform: scale(0.6); }
+      100% { transform: scale(1); }
     }
-    .tile.mine {
-      color: red;
+    @keyframes shake {
+      0%,100% { transform: translateX(0); }
+      25% { transform: translateX(-5px); }
+      50% { transform: translateX(5px); }
+      75% { transform: translateX(-5px); }
     }
-    #status {
-      margin-bottom: 10px;
-    }
+    .shake { animation: shake 0.3s ease; }
+    #status { margin-bottom: 10px; }
     #restartBtn, #cashOutBtn {
       padding: 10px 20px;
       background: #00bfa5;
@@ -94,14 +96,8 @@
 </div>
 
 <div class="controls">
-  <label>
-    Bet: $
-    <input type="number" id="betAmount" min="0.1" step="0.1" value="1" />
-  </label>
-  <label>
-    Mines:
-    <select id="mineCount"></select>
-  </label>
+  <label>Bet: $<input type="number" id="betAmount" min="0.1" step="0.1" value="1" /></label>
+  <label>Mines: <select id="mineCount"></select></label>
   <button id="restartBtn">Start Game</button>
   <button id="cashOutBtn" style="display:none;">Cash Out</button>
 </div>
@@ -109,120 +105,100 @@
 <div id="status">Click "Start Game" to play!</div>
 <div id="game"></div>
 
-<script>
-  const rows = 5;
-  const cols = 5;
-  const totalTiles = rows * cols;
+<!-- Sound -->
+<audio id="diamondSound" src="https://cdn.pixabay.com/audio/2022/03/15/audio_7126558d3f.mp3"></audio>
+<audio id="bombSound" src="https://cdn.pixabay.com/audio/2022/03/15/audio_6346a7fe1d.mp3"></audio>
 
-  const gameEl = document.getElementById('game');
-  const statusEl = document.getElementById('status');
-  const restartBtn = document.getElementById('restartBtn');
-  const cashOutBtn = document.getElementById('cashOutBtn');
+<script>
+  const rows = 5, cols = 5, totalTiles = rows * cols;
+  const gameEl = document.getElementById('game'), statusEl = document.getElementById('status');
+  const restartBtn = document.getElementById('restartBtn'), cashOutBtn = document.getElementById('cashOutBtn');
   const mineCountSelect = document.getElementById('mineCount');
   const betInput = document.getElementById('betAmount');
-  const balanceEl = document.getElementById('balance');
-  const winningsEl = document.getElementById('winnings');
+  const balanceEl = document.getElementById('balance'), winningsEl = document.getElementById('winnings');
+  const diamondSound = document.getElementById('diamondSound'), bombSound = document.getElementById('bombSound');
 
-  let mines = new Set();
-  let revealedTiles = 0;
-  let gameOver = false;
-  let diamondsToFind = 0;
+  let mines = new Set(), revealedTiles = 0, gameOver = false, diamondsToFind = 0;
+  let balance = parseFloat(localStorage.getItem('balance')) || 10, bet = 1, winnings = 0;
 
-  let balance = 10;
-  let bet = 1;
-  let winnings = 0;
+  const saveBalance = () => localStorage.setItem('balance', balance.toFixed(2));
+  const updateBalanceDisplay = () => {
+    balanceEl.textContent = balance.toFixed(2);
+    winningsEl.textContent = winnings.toFixed(2);
+    saveBalance();
+  }
 
-  // Populate mine selector
   for (let i = 1; i <= 24; i++) {
-    const option = document.createElement('option');
-    option.value = i;
-    option.textContent = i;
-    mineCountSelect.appendChild(option);
+    const o = document.createElement('option');
+    o.value = o.textContent = i;
+    mineCountSelect.appendChild(o);
   }
 
   function placeMines(count) {
     mines.clear();
-    while (mines.size < count) {
-      const rand = Math.floor(Math.random() * totalTiles);
-      mines.add(rand);
-    }
+    while (mines.size < count) mines.add(Math.floor(Math.random() * totalTiles));
   }
 
   function updateStatus(msg) {
     statusEl.textContent = msg;
   }
 
-  function updateBalanceDisplay() {
-    balanceEl.textContent = balance.toFixed(2);
-    winningsEl.textContent = winnings.toFixed(2);
-  }
-
-  function revealTile(tile, index) {
+  function revealTile(tile, i) {
     if (tile.classList.contains('revealed') || gameOver) return;
-
     tile.classList.add('revealed');
 
-    if (mines.has(index)) {
+    if (mines.has(i)) {
       tile.textContent = '💣';
-      tile.classList.add('mine');
-      balance = Math.max(0, balance - 1); // no negatives here
+      tile.classList.add('mine','shake');
+      bombSound.play();
+      if ('vibrate' in navigator) navigator.vibrate(300);
       winnings = 0;
       updateBalanceDisplay();
       revealAll();
-      updateStatus(`💥 You hit a bomb! You lost $1.`);
+      updateStatus(`💥 You hit a bomb! You lost your $${bet.toFixed(2)} bet.`);
       gameOver = true;
       cashOutBtn.style.display = 'none';
+      restartBtn.style.display = 'inline-block';
     } else {
       tile.textContent = '💎';
       tile.classList.add('diamond');
+      diamondSound.play();
       revealedTiles++;
-
       winnings = bet * 1.5 * revealedTiles;
-
       updateBalanceDisplay();
 
       if (revealedTiles === diamondsToFind) {
-        updateStatus(`🎉 You found all diamonds! Winnings: $${winnings.toFixed(2)}`);
-        revealAll();
-        cashOutBtn.style.display = 'none';
+        updateStatus(`🎉 All diamonds found! Auto cashing out $${winnings.toFixed(2)}!`);
         gameOver = true;
+        balance += winnings;
+        winnings = 0;
+        updateBalanceDisplay();
+        revealAll();
+        restartBtn.style.display = 'inline-block';
       } else {
-        updateStatus(`Diamonds found: ${revealedTiles} / ${diamondsToFind}. Winnings: $${winnings.toFixed(2)}`);
-        if (revealedTiles > 0) {
-          cashOutBtn.style.display = 'inline-block';
-        }
+        updateStatus(`Diamonds: ${revealedTiles} / ${diamondsToFind}. Winnings: $${winnings.toFixed(2)}`);
+        if (revealedTiles > 0) cashOutBtn.style.display = 'inline-block';
       }
     }
   }
 
   function revealAll() {
     for (let i = 0; i < totalTiles; i++) {
-      const tile = gameEl.children[i];
-      if (!tile.classList.contains('revealed')) {
-        if (mines.has(i)) {
-          tile.textContent = '💣';
-          tile.classList.add('revealed', 'mine');
-        } else {
-          tile.textContent = '💎';
-          tile.classList.add('revealed', 'diamond');
-        }
+      const t = gameEl.children[i];
+      if (!t.classList.contains('revealed')) {
+        t.classList.add('revealed');
+        t.textContent = mines.has(i) ? '💣' : '💎';
+        if (mines.has(i)) t.classList.add('mine');
+        else t.classList.add('diamond');
       }
     }
   }
 
   function startGame() {
     bet = parseFloat(betInput.value);
-    if (isNaN(bet) || bet <= 0) {
-      alert('Please enter a valid bet amount.');
-      return;
-    }
-    if (bet > balance) {
-      alert('Your bet cannot be greater than your current balance.');
-      return;
-    }
-
+    if (isNaN(bet) || bet <= 0) return alert('Enter a valid bet.');
+    if (bet > balance) return alert('Insufficient balance.');
     const mineCount = parseInt(mineCountSelect.value);
-
     revealedTiles = 0;
     gameOver = false;
     diamondsToFind = totalTiles - mineCount;
@@ -233,7 +209,6 @@
 
     gameEl.innerHTML = '';
     placeMines(mineCount);
-
     for (let i = 0; i < totalTiles; i++) {
       const tile = document.createElement('div');
       tile.classList.add('tile');
@@ -241,25 +216,25 @@
       tile.addEventListener('click', () => revealTile(tile, i));
       gameEl.appendChild(tile);
     }
-
-    updateStatus(`Diamonds found: 0 / ${diamondsToFind}. Place your bet and reveal tiles.`);
-    cashOutBtn.style.display = 'none'; // hide cash out initially
+    updateStatus(`Diamonds: 0 / ${diamondsToFind}. Tap tiles to reveal.`);
+    cashOutBtn.style.display = 'none';
+    restartBtn.style.display = 'none'; // hide start button
   }
 
-  function cashOut() {
+  restartBtn.addEventListener('click', startGame);
+  cashOutBtn.addEventListener('click', () => {
     if (winnings > 0) {
       balance += winnings;
-      updateStatus(`💰 You cashed out $${winnings.toFixed(2)}!`);
+      updateStatus(`💰 Cashed out $${winnings.toFixed(2)}!`);
       winnings = 0;
       updateBalanceDisplay();
       gameOver = true;
       cashOutBtn.style.display = 'none';
       revealAll();
+      restartBtn.style.display = 'inline-block'; // show start again
     }
-  }
+  });
 
-  restartBtn.addEventListener('click', startGame);
-  cashOutBtn.addEventListener('click', cashOut);
   mineCountSelect.value = 1;
   updateBalanceDisplay();
 </script>
