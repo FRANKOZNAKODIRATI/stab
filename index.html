@@ -1,0 +1,154 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Treasure Tiles</title>
+  <style>
+    body { font-family: sans-serif; background: #f4f4f4; margin: 0; padding: 0; text-align: center; }
+    h1 { margin-top: 20px; }
+    #game { display: grid; grid-template-columns: repeat(5, 60px); gap: 10px; justify-content: center; margin: 20px auto; }
+    .tile { width: 60px; height: 60px; background: #ddd; border: 1px solid #aaa; font-size: 30px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: transform 0.2s; }
+    .tile:active { transform: scale(0.95); }
+    .revealed { background: #aaf; }
+    .bomb { background: #f66; }
+    #controls, #info { margin: 10px; }
+    button { padding: 10px 20px; font-size: 16px; margin: 10px; }
+    #cashoutBtn { display: none; }
+  </style>
+</head>
+<body>
+  <h1>Treasure Tiles</h1>
+
+  <div id="info">
+    <p><strong>Balance:</strong> <span id="balance">0</span> Doubloons</p>
+    <p><strong>Winnings:</strong> <span id="winnings">0</span> Doubloons</p>
+  </div>
+
+  <div id="controls">
+    <label>Bet: <input type="number" id="betAmount" value="1" min="1"/></label>
+    <label>Mines: 
+      <select id="mineCount">
+        <option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option><option value="11">11</option><option value="12">12</option><option value="13">13</option><option value="14">14</option><option value="15">15</option><option value="16">16</option><option value="17">17</option><option value="18">18</option><option value="19">19</option><option value="20">20</option><option value="21">21</option><option value="22">22</option><option value="23">23</option><option value="24">24</option>
+      </select>
+    </label>
+    <button id="startBtn">Start Game</button>
+    <button id="cashoutBtn">Cash Out</button>
+  </div>
+
+  <div id="game"></div>
+
+  <audio id="winSound" src="https://cdn.pixabay.com/audio/2022/03/31/audio_47d4c195a5.mp3"></audio>
+  <audio id="loseSound" src="https://cdn.pixabay.com/audio/2022/03/15/audio_a7b07b0cfb.mp3"></audio>
+
+  <script>
+    let balance = parseFloat(localStorage.getItem("balance")) || 10;
+    let winnings = 0;
+    let gameStarted = false;
+    let revealedCount = 0;
+    let mineIndexes = [];
+    const multiplier = 1.5;
+
+    const balanceEl = document.getElementById("balance");
+    const winningsEl = document.getElementById("winnings");
+    const betInput = document.getElementById("betAmount");
+    const mineSelect = document.getElementById("mineCount");
+    const startBtn = document.getElementById("startBtn");
+    const cashoutBtn = document.getElementById("cashoutBtn");
+    const gameEl = document.getElementById("game");
+    const winSound = document.getElementById("winSound");
+    const loseSound = document.getElementById("loseSound");
+
+    function updateDisplay() {
+      balanceEl.textContent = balance.toFixed(2);
+      winningsEl.textContent = winnings.toFixed(2);
+    }
+
+    function createBoard() {
+      gameEl.innerHTML = "";
+      mineIndexes = [];
+      revealedCount = 0;
+      winnings = 0;
+      updateDisplay();
+      const tiles = 25;
+      const mineCount = parseInt(mineSelect.value);
+
+      while (mineIndexes.length < mineCount) {
+        const idx = Math.floor(Math.random() * tiles);
+        if (!mineIndexes.includes(idx)) mineIndexes.push(idx);
+      }
+
+      for (let i = 0; i < tiles; i++) {
+        const tile = document.createElement("div");
+        tile.className = "tile";
+        tile.dataset.index = i;
+        tile.onclick = () => revealTile(tile);
+        gameEl.appendChild(tile);
+      }
+    }
+
+    function revealTile(tile) {
+      if (!gameStarted || tile.classList.contains("revealed")) return;
+      const index = parseInt(tile.dataset.index);
+      if (mineIndexes.includes(index)) {
+        tile.classList.add("bomb");
+        tile.textContent = "💣";
+        loseSound.play();
+        navigator.vibrate?.(200);
+        gameOver(false);
+      } else {
+        tile.classList.add("revealed");
+        tile.textContent = "💎";
+        revealedCount++;
+        winnings += multiplier;
+        winSound.play();
+        updateDisplay();
+        cashoutBtn.style.display = "inline-block";
+        if (revealedCount >= 25 - parseInt(mineSelect.value)) {
+          gameOver(true);
+        }
+      }
+    }
+
+    function gameOver(won) {
+      gameStarted = false;
+      startBtn.style.display = "inline-block";
+      cashoutBtn.style.display = "none";
+      if (!won) {
+        balance -= parseFloat(betInput.value);
+        winnings = 0;
+      } else {
+        balance += winnings;
+        winnings = 0;
+      }
+      localStorage.setItem("balance", balance);
+      updateDisplay();
+    }
+
+    startBtn.onclick = () => {
+      const bet = parseFloat(betInput.value);
+      if (bet <= 0 || bet > balance) {
+        alert("Invalid bet or insufficient Doubloons.");
+        return;
+      }
+      gameStarted = true;
+      startBtn.style.display = "none";
+      cashoutBtn.style.display = "none";
+      createBoard();
+    };
+
+    cashoutBtn.onclick = () => {
+      balance += winnings;
+      winnings = 0;
+      localStorage.setItem("balance", balance);
+      updateDisplay();
+      cashoutBtn.style.display = "none";
+      startBtn.style.display = "inline-block";
+      alert("You cashed out your Doubloons!");
+    };
+
+    updateDisplay();
+  </script>
+</body>
+</html>
